@@ -1,7 +1,10 @@
 package com.fsc.cases;
 
+import com.fsc.cases.agent.AmlAgent;
+import com.fsc.cases.agent.AmlAgentFactory;
 import com.fsc.cases.model.AgentAnalysis;
 import com.fsc.cases.model.RiskLevel;
+import com.fsc.cases.rag.LegalRag;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 
@@ -61,5 +64,13 @@ public final class RatingEngine {
                 .modelName(modelName)
                 .temperature(0.0)
                 .build();
+    }
+
+    /**
+     * 真实模型 Agent：ChatModel + @Tool 工具集 + 法规 RAG 的完整装配。
+     * 生产链路上模型输出仍需经 {@code GuardrailEvaluator} 校验。
+     */
+    public static AmlAgent liveAgent(String apiKey, String baseUrl, String modelName) {
+        return AmlAgentFactory.create(live(apiKey, baseUrl, modelName), LegalRag.build());
     }
 }

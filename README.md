@@ -28,10 +28,28 @@
 
 | 特性 | 说明 |
 |---|---|
+| 🤖 **真实 Agent 流程** | 用 LangChain4j `AiServices` + `@Tool` + 结构化输出跑通 AML 尽调 Agent；模型输出映射为 `AgentAnalysis` 对象 |
+| 📚 **法规 RAG** | `LegalRag` 把 AML 法规灌入向量库，经 `ContentRetriever` 检索，结论须引用检索到的 `evidenceId` |
 | 🏦 **金融垂直语料** | 内置 AML 法规索引（`AML-001` ~ `AML-005`）与可疑交易案例集，取代官方示例的通用文档 |
 | 🛡️ **确定性护栏** | `GuardrailEvaluator` 独立于模型做四类校验：证据引用白名单、条文语义强制、Prompt 注入扫描、无依据保守升级 |
-| 📏 **可评测（Eval）** | `FinEval` 对固定案例集双轨计分：**原始模型分 vs 护栏修正后分**，结果落盘可 CI |
-| 🔌 **Mock-first** | 无 API Key 时可离线全链路跑通，便于上手与 CI；配置 Key 后可切换真实模型 |
+| 📏 **可评测（Eval）** | `FinEvalTest` 对固定案例集双轨计分：**原始模型分 vs 护栏修正后分**，结果落盘 JSON 可 CI |
+| 🔌 **Mock-first** | 无 API Key 时可离线全链路跑通，便于上手与 CI；配置 Key 后切换真实模型 |
+
+### Agent 怎么工作
+
+```
+可疑交易描述
+   → AiServices Agent（大模型）
+       ├─ @Tool screenSanctions      制裁名单筛查
+       ├─ @Tool queryTransactions    交易画像查询
+       └─ @Tool searchRegulations    法规 RAG 检索（ContentRetriever）
+   → 结构化输出 AgentAnalysis { riskLevel, rationale, evidenceId }
+   → GuardrailEvaluator 确定性校验（证据白名单 / 条文强制 / 注入扫描）
+   → 最终评级 + 是否转人工
+```
+
+> RAG 使用的 embedding 是**离线确定性哈希模型**（`HashingEmbeddingModel`），做的是词法近似匹配而非语义匹配 ——
+> 这样保证零下载、可 CI。生产环境替换为真实语义 embedding 模型即可，RAG 装配代码无需改动。
 
 ### 护栏做了什么
 
@@ -47,13 +65,14 @@
 需要 JDK 21 与 Maven。
 
 ```bash
-# 全离线运行（Mock 模型，无需任何 API Key）
+# 全离线运行（Mock 模型 + 离线 RAG，无需任何 API Key、无需联网）
 mvn -pl fsc-cases test
 
-# 查看评测输出：原始评级准确率 → 护栏修正后准确率、证据引用率
+# 运行真实模型 Agent 冒烟测试（需自备 Key）
+RUN_LIVE=true DEEPSEEK_API_KEY=xxx mvn -pl fsc-cases test -Dtest=AmlAgentLiveTest
 ```
 
-运行结束后会在控制台打印双轨计分结果与逐条明细，`target/fsc-eval/` 下会写出报告文件。
+运行结束后会在控制台打印双轨计分结果与逐条明细，`target/fsc-eval/` 下会写出 JSON 报告文件。
 
 ## 目录结构
 
@@ -63,7 +82,15 @@ fsc-examples/
 └── fsc-cases/
     └── src/
         ├── main/java/com/fsc/cases/
-        │   ├── RatingEngine.java              # 评级引擎：Mock 打分 + 真实模型接入
+        │   ├── RatingEngine.java              # 评级引擎：Mock 打分 + 真实模型 Agent 装配
+        │   ├── agent/
+        │   │   ├── AmlAgent.java              # AiServices 接口（@SystemMessage + 结构化返回）
+        │   │   └── AmlAgentFactory.java       # 装配 ChatModel + 工具 + RAG
+        │   ├── tool/
+        │   │   └── AmlTools.java              # @Tool 工具集（制裁筛查 / 交易查询 / 法规检索）
+        │   ├── rag/
+        │   │   ├── LegalRag.java              # 法规向量库 + ContentRetriever 装配
+        │   │   └── HashingEmbeddingModel.java # 离线确定性 embedding（零下载）
         │   ├── guardrail/
         │   │   └── GuardrailEvaluator.java    # 确定性合规护栏
         │   ├── data/
@@ -73,7 +100,9 @@ fsc-examples/
         │       ├── AgentAnalysis.java         # 结构化输出（不带客户身份信息）
         │       └── RiskLevel.java             # 风险等级闭集（防幻觉产出未定义等级）
         └── test/java/com/fsc/cases/
-            └── FinEval.java                   # 双轨评测
+            ├── FinEvalTest.java               # 双轨评测（离线）
+            ├── LegalRagTest.java              # RAG 检索测试（离线）
+            └── agent/AmlAgentLiveTest.java    # 真实模型冒烟（默认跳过）
 ```
 
 ## 与原仓库的差异

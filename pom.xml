@@ -44,6 +44,8 @@
                     <version>3.11.0</version>
                     <configuration>
                         <release>21</release>
+                        <!-- 保留方法/构造器参数名：结构化输出反序列化到 record 的稳妥保障 -->
+                        <parameters>true</parameters>
                     </configuration>
                 </plugin>
             </plugins>
