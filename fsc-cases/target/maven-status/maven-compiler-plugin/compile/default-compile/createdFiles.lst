@@ -1,9 +1,0 @@
-com\fsc\cases\data\LegalIndex.class
-com\fsc\cases\data\LegalIndex$LegalArticle.class
-com\fsc\cases\guardrail\GuardrailEvaluator$GuardedResult.class
-com\fsc\cases\data\CaseDataset$Case.class
-com\fsc\cases\guardrail\GuardrailEvaluator.class
-com\fsc\cases\data\CaseDataset.class
-com\fsc\cases\model\AgentAnalysis.class
-com\fsc\cases\model\RiskLevel.class
-com\fsc\cases\RatingEngine.class
