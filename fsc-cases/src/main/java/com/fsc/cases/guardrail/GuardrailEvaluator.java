@@ -44,10 +44,13 @@ public final class GuardrailEvaluator {
             findings.add("EVIDENCE_MISSING: 未引用合法 evidenceId");
             hold = true;
         } else {
-            // 2. 条文语义强制：一级制裁命中必须 HIGH + 转人工
-            if ("AML-001".equals(evidence) && level != RiskLevel.HIGH) {
-                findings.add("GUARDRAIL_UPGRADE: AML-001 一级制裁命中强制 HIGH");
-                level = RiskLevel.HIGH;
+            // 2. 条文语义强制：一级制裁命中必须 HIGH + 无条件转人工（无论模型是否已给对等级）
+            if ("AML-001".equals(evidence)) {
+                if (level != RiskLevel.HIGH) {
+                    findings.add("GUARDRAIL_UPGRADE: AML-001 一级制裁命中强制 HIGH");
+                    level = RiskLevel.HIGH;
+                }
+                findings.add("MANDATORY_HOLD: AML-001 一级制裁命中必须转人工");
                 hold = true;
             }
         }

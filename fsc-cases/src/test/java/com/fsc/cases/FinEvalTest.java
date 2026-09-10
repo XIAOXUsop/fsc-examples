@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 双轨计分：原始模型准确率 vs Guardrails 后准确率 + 法规证据引用率。
  * 结果写 target/fsc-eval/report-{ts}.json 供 CI 与人工审计。
  */
-class FinEval {
+class FinEvalTest {
 
     record Row(String caseId, String rawLevel, String finalLevel, boolean manualHold, List<String> violations) {
     }
