@@ -38,7 +38,8 @@ public final class RatingEngine {
         }
         // 夜间跨境大额
         if (s.contains("跨境")) {
-            boolean night = s.contains("01:") || s.contains("02:") || s.contains("03:")
+            boolean night = s.contains("夜间") || s.contains("凌晨")
+                    || s.contains("01:") || s.contains("02:") || s.contains("03:")
                     || s.contains("01：") || s.contains("02：") || s.contains("03：")
                     || s.contains("(01") || s.contains("(02") || s.contains("(03")
                     || s.contains("（01") || s.contains("（02") || s.contains("（03");
