@@ -122,4 +122,4 @@ fsc-examples/
 
 ## License
 
-见仓库根目录 LICENSE（待补充）。
+[MIT](LICENSE) © 2026 XIAOXUsop
