@@ -12,7 +12,17 @@
     <artifactId>fsc-cases</artifactId>
     <name>FSC Cases</name>
 
+    <properties>
+        <mcp.version>2.0.1</mcp.version>
+    </properties>
+
     <dependencies>
+        <!-- MCP（Model Context Protocol）官方 Java SDK：把 AML 能力以标准工具面暴露给任意 MCP 客户端 -->
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp</artifactId>
+            <version>${mcp.version}</version>
+        </dependency>
         <!-- LangChain4j 核心（test 及示例使用） -->
         <dependency>
             <groupId>dev.langchain4j</groupId>

@@ -28,6 +28,7 @@
 
 | 特性 | 说明 |
 |---|---|
+| 🔌 **MCP Server** | 通过 **Model Context Protocol** 把 AML 工具面标准化输出，任何 MCP 客户端（Claude Desktop / IDE 助手）可直接接入，无需为本项目单独写适配 |
 | 🤖 **真实 Agent 流程** | 用 LangChain4j `AiServices` + `@Tool` + 结构化输出跑通 AML 尽调 Agent；模型输出映射为 `AgentAnalysis` 对象 |
 | 📚 **法规 RAG** | `LegalRag` 把 AML 法规灌入向量库，经 `ContentRetriever` 检索，结论须引用检索到的 `evidenceId` |
 | 🏦 **金融垂直语料** | 内置 AML 法规索引（`AML-001` ~ `AML-005`）与可疑交易案例集，取代官方示例的通用文档 |
@@ -50,6 +51,35 @@
 
 > RAG 使用的 embedding 是**离线确定性哈希模型**（`HashingEmbeddingModel`），做的是词法近似匹配而非语义匹配 ——
 > 这样保证零下载、可 CI。生产环境替换为真实语义 embedding 模型即可，RAG 装配代码无需改动。
+
+### MCP：把同一套能力开放给任意客户端
+
+上面的三个 `@Tool` 同时通过 **MCP（Model Context Protocol）** 暴露为标准工具面：
+
+| MCP 工具 | 能力 |
+|---|---|
+| `screen_sanctions` | 制裁名单筛查 |
+| `search_regulations` | 法规条文检索（返回 `evidenceId`） |
+| `query_transactions` | 客户交易画像 |
+
+**Agent 走的路径和 MCP 客户端走的路径是同一份实现**——不存在"演示一套、真用一套"。
+注意 MCP 只负责标准化输出，**不承担输出校验**；风险结论仍须过 `GuardrailEvaluator`。
+
+在 MCP 客户端（如 Claude Desktop）中配置：
+
+```json
+{
+  "mcpServers": {
+    "fsc-aml": {
+      "command": "java",
+      "args": ["-cp", "<本项目 classpath>", "com.fsc.cases.mcp.McpStdioMain"]
+    }
+  }
+}
+```
+
+全离线、无需 API Key。协议层有真实握手测试：`McpStdioProtocolTest` 会把服务作为
+独立子进程拉起，用官方 MCP 客户端完成 initialize → tools/list → tools/call 全流程。
 
 ### 护栏做了什么
 
@@ -88,6 +118,9 @@ fsc-examples/
         │   │   └── AmlAgentFactory.java       # 装配 ChatModel + 工具 + RAG
         │   ├── tool/
         │   │   └── AmlTools.java              # @Tool 工具集（制裁筛查 / 交易查询 / 法规检索）
+        │   ├── mcp/
+        │   │   ├── AmlMcpServer.java          # MCP 工具目录构建（复用 AmlTools 同一份实现）
+        │   │   └── McpStdioMain.java          # stdio 入口，供 MCP 客户端以子进程拉起
         │   ├── rag/
         │   │   ├── LegalRag.java              # 法规向量库 + ContentRetriever 装配
         │   │   └── HashingEmbeddingModel.java # 离线确定性 embedding（零下载）
@@ -102,6 +135,8 @@ fsc-examples/
         └── test/java/com/fsc/cases/
             ├── FinEvalTest.java               # 双轨评测（离线）
             ├── LegalRagTest.java              # RAG 检索测试（离线）
+            ├── mcp/AmlMcpServerTest.java      # MCP 工具契约测试（离线）
+            ├── mcp/McpStdioProtocolTest.java  # MCP 协议握手端到端测试（离线）
             └── agent/AmlAgentLiveTest.java    # 真实模型冒烟（默认跳过）
 ```
 
