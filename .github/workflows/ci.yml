@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Build & Offline Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run offline tests (Mock 模型 + 离线 RAG，无需 API Key)
+        run: mvn -B -pl fsc-cases test
+
+      - name: Upload evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fsc-eval-report
+          path: fsc-cases/target/fsc-eval/
+          if-no-files-found: ignore
