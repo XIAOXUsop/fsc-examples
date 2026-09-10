@@ -34,7 +34,7 @@ public final class CaseDataset {
             new Case("N002",
                 "客户在生日 23:50 给家人跨境汇款 等值 8 万元，金额低于 50 万阈值，非频繁",
                 RiskLevel.LOW, "AML-004"),
-            new Case("N002",
+            new Case("N003",
                 "客户为外贸公司员工，工资由境外母公司按月发等值 4.2 万元，固定日期，有合同",
                 RiskLevel.LOW, "AML-004"),
 
