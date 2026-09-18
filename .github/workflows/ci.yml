@@ -30,3 +30,29 @@ jobs:
           name: fsc-eval-report
           path: fsc-cases/target/fsc-eval/
           if-no-files-found: ignore
+
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 无依赖的密钥扫描：不引第三方服务、不需要 token，纯 grep，跑完不到一秒。
+      #
+      # 这个仓库尤其需要：它演示的是「接真实模型」，README 与示例配置里到处是
+      # `api.key` / `DEEPSEEK_API_KEY` 之类的字样——**最容易有人顺手把真 key 填进去
+      # 然后提交**。而公开仓库里泄露一个 key 的代价，远大于这一步的开销。
+      #
+      # ⚠️ 加新模式前**先在本地跑一遍**，确认不误报（README 里的占位符、
+      # 示例配置里的假 key 都可能被误伤），再**反向验证**它真的能抓到真密钥。
+      - name: Scan for secrets
+        run: |
+          if grep -rInE \
+            --exclude-dir=node_modules --exclude-dir=target --exclude-dir=.git \
+            --exclude='*.lock' \
+            "(sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|BEGIN (RSA|EC|OPENSSH) PRIVATE KEY|api[_-]?key[[:space:]]*[:=][[:space:]]*['\"][A-Za-z0-9_-]{16,})" \
+            . ; then
+            echo "::error::检测到疑似密钥/私钥泄露"
+            exit 1
+          fi
+          echo "未检测到密钥/私钥泄露"
