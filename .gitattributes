@@ -1,0 +1,29 @@
+# 换行符统一为 LF。
+#
+# 为什么需要显式写：这台开发机的 `core.autocrlf` 是 **true**，也就是说
+# 「工作区里检出什么行尾」取决于每个人自己的 git 配置。这个仓库目前
+# `git ls-files --eol` 全是 `i/lf w/lf`、文件里 0 个 CRLF——但那是
+# **当时那批文件恰好是 LF**，不是规则保证的结果：换个贡献者、换一次干净 clone，
+# 同一个文件就可能是 CRLF，而 `git status` 什么都不会说。
+#
+# 把这个仓库与同族的六个仓库对齐（它们都有这个文件），有具体理由：
+#
+#   - `McpStdioProtocolTest` 走的是 **MCP 的 stdio 协议**，那是**行分隔的 JSON-RPC**。
+#     行尾在协议层是有意义的东西，不该由某个人的 `core.autocrlf` 决定。
+#   - 项目在 Windows 上开发、在 Linux 上跑 CI。两边行尾不一致时，
+#     「本地好好的」在 CI 上失败的报错通常指向别处——同族的
+#     desensitize-spring-boot-starter 就这么丢过一次：CRLF 混进发布 jar，
+#     同一份源码构建出的字节和已发布的不一样，而**没有任何一步会因此变红**。
+#
+# 注意：加了这些规则**不会**回头改写已经检出的文件。判据是
+# `git ls-files --eol` 全为 `i/lf w/lf`，不是"我加了这个文件"。
+* text=auto eol=lf
+
+# 二进制不做行尾转换
+*.jar binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
