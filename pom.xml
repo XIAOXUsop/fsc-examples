@@ -12,6 +12,18 @@
     <name>FSC - FinReg Sample Cases</name>
     <description>金融合规场景的 LangChain4j 示例集：合规护栏 + 可评测 + 离线可跑</description>
 
+    <!--
+      2026-09-19 补：仓库里一直有 MIT 的 LICENSE 文件、README 末尾也写着 MIT，
+      但 POM 里没有这一节——同族的另外几个仓库都有。
+      放在父 POM，`fsc-cases` 通过 <parent> 继承，所以子模块不必再写一遍。
+    -->
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+        </license>
+    </licenses>
+
     <modules>
         <module>fsc-cases</module>
     </modules>
