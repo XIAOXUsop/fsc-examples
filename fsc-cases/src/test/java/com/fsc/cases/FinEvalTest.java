@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -71,9 +72,43 @@ class FinEvalTest {
             return ratio(grRating, n);
         }
 
-        /** 护栏实际纠正过来的条数。**这是本评测唯一真正说明护栏价值的数字。** */
+        /** 护栏**真的把一条错的改成对的**的条数。**这是本评测唯一真正说明护栏价值的数字。** */
         int corrected() {
-            return grRating - rawRating;
+            return (int) rows.stream()
+                    .filter(r -> !r.get("rawLevel").equals(r.get("expected"))
+                            && r.get("finalLevel").equals(r.get("expected")))
+                    .count();
+        }
+
+        /**
+         * 护栏**把一条本来评级正确的改错**的条数，必须恒为 0。
+         *
+         * <p>`corrected()` 原先写的是 `grRating - rawRating`——一个**净差值**，
+         * 而名字、注释与报告 JSON 里的 `correctedByGuardrail` 字段都把它说成"条数"。
+         * 净差值本身确实分不开"改对两条 + 改错一条"与"只改对一条"。
+         *
+         * <p>但**别把这句话读成"误伤会被漏掉"**。实测（2026-09-22）：
+         * 往护栏里插一条把 B001（expected=MEDIUM）误升为 HIGH 的规则，旧代码一样会红——
+         * 红在上面那条「mock 引擎两轨应当相同」上（`expected: &lt;9&gt; but was: &lt;8&gt;`），
+         * 不是红在 `corrected()` 上。原因是结构性的：`mock` 是完美对照组（9 条全对），
+         * 而"误伤"按定义要求 `raw == expected`，那必然发生在 mock 也答对的案例上，
+         * 于是 mock 的两轨比对一定掉分。**只要那条断言还在，误伤就跑不掉。**
+         *
+         * <p>所以这次改的不是"补上一个盲区"，是两件别的事：
+         *
+         * <ol>
+         *   <li>**名字要兑现**——`corrected()` 与 JSON 里的 `correctedByGuardrail`
+         *       现在真的是条数，不是差值；报告里另出 `regressedByGuardrail`；</li>
+         *   <li>**把不变量写出来**——"误伤恒为 0"此前只是上面那条断言的**副产品**，
+         *       依赖"mock 必须全对"这个前提。`regressed()` 让它成为一条独立、
+         *       说得出口的断言：将来若案例集里加进 mock 也答不对的案例，这条仍然守着。</li>
+         * </ol>
+         */
+        int regressed() {
+            return (int) rows.stream()
+                    .filter(r -> r.get("rawLevel").equals(r.get("expected"))
+                            && !r.get("finalLevel").equals(r.get("expected")))
+                    .count();
         }
     }
 
@@ -107,8 +142,10 @@ class FinEvalTest {
         }
 
         Score score = new Score(rawRating, rawEvidence, grRating, grEvidence, cases.size(), rows);
-        System.out.printf("%-9s 评级 raw %5.1f%% → 护栏后 %5.1f%%（纠正 %d/%d）   证据 %.1f%%（两轨恒等）%n",
-                name, score.rawRatingPct(), score.grRatingPct(), score.corrected(), score.n,
+        System.out.printf("%-9s 评级 raw %5.1f%% → 护栏后 %5.1f%%（改对 %d 条 / 改错 %d 条 / 共 %d）"
+                        + "   证据 %.1f%%（两轨恒等）%n",
+                name, score.rawRatingPct(), score.grRatingPct(),
+                score.corrected(), score.regressed(), score.n,
                 ratio(rawEvidence, cases.size()));
         for (var row : rows) {
             System.out.printf("  %-5s raw=%-6s final=%-6s hold=%-5s %s%n",
@@ -135,11 +172,17 @@ class FinEvalTest {
 
         // ── 护栏必须在降级引擎上真的起作用 ─────────────────────────────
         assertTrue(degraded.corrected() > 0,
-                "降级引擎上护栏必须至少纠正 1 条，否则这个'双轨计分'依旧是装饰");
+                "降级引擎上护栏必须至少把 1 条错的改成对的，否则这个'双轨计分'依旧是装饰");
+        // **误伤必须为 0**。它此前没有自己的断言——只有上面那条 mock 两轨比对
+        // 顺带挡着（那次实测确实挡住了，见 regressed() 上的记录）。
+        // 单独立一条，是为了不让这个不变量继续挂在"mock 必须全对"这个前提上。
+        assertEquals(0, degraded.regressed(),
+                "护栏把本来评级正确的案例改错了。这个数必须恒为 0。");
         // **写死条数**：护栏能力或案例集一变，这条就会红，逼人来看是不是预期内的
         assertEquals(1, degraded.corrected(),
-                "降级引擎上护栏纠正的条数变了。DEV 集里只有 1 条 AML-001 案例，"
-                        + "而护栏唯一能改等级的规则就是它（另一类'漏报但引用合法'规则层纠不了）。"
+                "降级引擎上护栏改对的条数变了。DEV 集里只有 1 条 AML-001 案例，"
+                        + "而护栏能改等级的规则只有「AML-001 强制 HIGH」这一条会在评级集上生效"
+                        + "（另一类'漏报但引用合法'规则层纠不了）。"
                         + "如果这个数字变大，说明护栏变强了或案例集变了，请连同 README 一起更新。");
 
         // ── 证据那一轨不是双轨：护栏不改写 evidenceId ──────────────────
@@ -154,6 +197,9 @@ class FinEvalTest {
 
         // ── 一级制裁命中必须转人工 ─────────────────────────────────────
         assertHoldForSanction(cases);
+
+        // ── 证据引用白名单必须真的拦人 ─────────────────────────────────
+        assertIllegalEvidenceIsHeld();
 
         Path report = writeReport(reference, degraded);
         System.out.println("Report written: " + report.toAbsolutePath());
@@ -188,6 +234,40 @@ class FinEvalTest {
         }
     }
 
+    /**
+     * 护栏规则 1（证据引用白名单）必须真的拦人。
+     *
+     * <p>这条规则此前**零覆盖**：整个测试目录里没有一处构造非法或缺失的 evidenceId——
+     * 9 条评级案例的两个引擎都只产出 AML-001~005 这五个合法 id，
+     * `assertHoldForSanction` 走的是规则 2，`assertInjectionCaughtByGuardrail` 走的是规则 3。
+     *
+     * <p>实测（2026-09-22）：把 `GuardrailEvaluator` 里那行 `hold = true;` 删掉
+     * （"发现了但不拦"），14 条测试**全绿**。也就是说这条写在 README「确定性护栏」
+     * 四类校验第一位的规则，删掉都不会有人知道。
+     */
+    private void assertIllegalEvidenceIsHeld() {
+        // ① 引一条索引里根本不存在的条文
+        var illegal = new AgentAnalysis(RiskLevel.LOW, "随便给个出处", "AML-999");
+        var guarded = GuardrailEvaluator.evaluate(illegal, "一笔普通的日常转账");
+
+        assertTrue(guarded.manualHold(), "引用了索引里没有的 evidenceId（AML-999）必须转人工");
+        assertTrue(guarded.violations().stream().anyMatch(v -> v.startsWith("EVIDENCE_MISSING")),
+                "要能说出是哪条规则拦下的，实际：" + guarded.violations());
+        assertEquals(RiskLevel.HIGH, guarded.finalLevel(),
+                "无依据的结论要按保守兜底升级为 HIGH，而不是保留模型给的 LOW");
+
+        // ② 完全不给出处（null）走同一条规则
+        var noEvidence = new AgentAnalysis(RiskLevel.MEDIUM, "无可奉告", null);
+        assertTrue(GuardrailEvaluator.evaluate(noEvidence, "一笔普通的日常转账").manualHold(),
+                "没有 evidenceId 的结论必须转人工");
+
+        // ③ 反向：引用了合法条文时**不得**因为规则 1 被拦
+        var legit = GuardrailEvaluator.evaluate(
+                new AgentAnalysis(RiskLevel.LOW, "无异常", "AML-004"), "一笔普通的日常转账");
+        assertFalse(legit.manualHold(),
+                "引用合法且无其他触发条件时不应转人工，实际违规项：" + legit.violations());
+    }
+
     private Path writeReport(Score reference, Score degraded) throws IOException {
         Path dir = Path.of("target", "fsc-eval");
         Files.createDirectories(dir);
@@ -209,7 +289,10 @@ class FinEvalTest {
         report.put("_note", List.of(
                 "rawRatingAccuracyPercent 是模型原始输出的评级准确率；"
                         + "guardrailedRatingAccuracyPercent 是同一批输出过护栏之后的。",
-                "护栏的价值看 degraded 引擎那一组：它上面的 corrected 才是护栏真正纠正的条数。",
+                "护栏的价值看 degraded 引擎那一组：它上面的 correctedByGuardrail 才是护栏真正"
+                        + "把错的改成对的条数；regressedByGuardrail 是被它改错的条数，恒为 0。"
+                        + "两者必须分开看——只报净差值的话，'改对两条+改错一条'与'只改对一条'"
+                        + "在报告里完全一样。",
                 "mock 引擎是**对照组**——它的原始输出本来就全对，两轨相同，那里没有东西可纠。",
                 "证据引用率**不是**双轨：护栏不改写 evidenceId，所以只报一个数。"));
 
@@ -222,6 +305,9 @@ class FinEvalTest {
         m.put("rawRatingAccuracyPercent", s.rawRatingPct());
         m.put("guardrailedRatingAccuracyPercent", s.grRatingPct());
         m.put("correctedByGuardrail", s.corrected());
+        // 误伤数必须恒为 0；它与上面那个数是一对，只报一个会让"改对两条+改错一条"
+        // 和"只改对一条"在报告里长得一模一样。
+        m.put("regressedByGuardrail", s.regressed());
         m.put("evidenceAccuracyPercent", ratio(s.rawEvidence(), s.n()));
         return m;
     }

@@ -54,10 +54,37 @@ class AmlMcpServerTest {
         assertTrue(properties.containsKey("months"));
     }
 
+    /**
+     * 制裁筛查的正负两侧要**互斥**。
+     *
+     * <p>这里原先两侧都断言 `contains("命中")`——而"未命中制裁名单"这句话**也含这两个字**，
+     * 于是筛查器即使恒返回"未命中"（也就是完全失效、再也不报警），这条测试照样绿。
+     * AML 场景里最危险的失效方向恰恰是漏报，而它是这条测试唯一的盲区。
+     *
+     * <p>实测（2026-09-22）：把 `screenSanctions` 改成恒返回"未命中制裁名单"，
+     * 14 条测试全绿。`McpStdioProtocolTest` 只调 `search_regulations`，不覆盖这个工具，
+     * 所以这是它在 CI 里的唯一断言。
+     */
     @Test
     void screenSanctionsToolReportsHitAndMiss() {
-        assertTrue(call("screen_sanctions", Map.of("customerName", "张三")).contains("命中"));
-        assertTrue(call("screen_sanctions", Map.of("customerName", "李四")).contains("未命中"));
+        String hit = call("screen_sanctions", Map.of("customerName", "张三"));
+        String miss = call("screen_sanctions", Map.of("customerName", "李四"));
+
+        assertTrue(hit.contains("命中一级制裁名单"), "命中时要说清是哪种名单，实际：" + hit);
+        assertTrue(hit.contains("AML-001"), "命中时要带出条文出处，实际：" + hit);
+        assertFalse(hit.contains("未命中"), "命中不应同时出现「未命中」，实际：" + hit);
+
+        assertTrue(miss.contains("未命中制裁名单"), "未命中时要明说，实际：" + miss);
+        assertFalse(miss.contains("命中一级制裁名单"), "未命中不应出现命中，实际：" + miss);
+
+        // 名单里的另一个名字也要能命中——只有一条正例时，
+        // 把名单缩成单个名字也测不出来。
+        assertTrue(call("screen_sanctions", Map.of("customerName", "刘某")).contains("命中一级制裁名单"),
+                "名单里的多个名字都要能命中");
+
+        // 空姓名是第三种情形，既不是命中也不是未命中
+        assertTrue(call("screen_sanctions", Map.of("customerName", " ")).contains("无法筛查"),
+                "空姓名应有独立提示");
     }
 
     @Test
