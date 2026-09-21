@@ -55,6 +55,39 @@ class AmlMcpServerTest {
     }
 
     /**
+     * 「months 默认 3」必须是**契约上可达的**，而不是只写在描述里。
+     *
+     * <p>原先 {@code query_transactions} 的 schema 由 {@code schema(...)} 组装，
+     * 而那个方法把声明的每个属性都塞进 {@code required}——于是描述里写着"默认 3"、
+     * 契约上却是必填：一个照着 description 办事、不传 months 的合规客户端会被
+     * 协议层的入参校验直接拒掉。**写着一个行为，契约上却禁止走到它**，
+     * 而下面那条"不传 months 时回落到默认值"的测试是直接调处理函数，
+     * 绕过了 schema 校验，所以一直是绿的。
+     *
+     * <p>这条测试钉的是"契约与描述一致"这件事本身：months 在 properties 里、
+     * **不在** required 里，且 required 非空（customerId 仍然是必填的——
+     * 顺带防住"把整个 required 删掉"这种过宽的修法）。
+     */
+    @Test
+    void optionalMonthsIsActuallyOptionalInTheSchema() {
+        Map<String, Object> schema = toolNamed("query_transactions").inputSchema();
+        Map<String, Object> properties = propertiesOf(schema);
+
+        assertTrue(properties.containsKey("months"), "months 应当声明在 properties 里");
+        assertFalse(requiredOf(schema).contains("months"),
+                "months 写在 required 里，描述里的「默认 " + 3 + "」在任何合规客户端上都不可达");
+        assertTrue(requiredOf(schema).contains("customerId"), "customerId 仍应是必填");
+        assertFalse(requiredOf(schema).isEmpty(), "required 不能为空——那等于所有入参都可选");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> requiredOf(Map<String, Object> schema) {
+        Object value = schema.get("required");
+        assertTrue(value instanceof List, "schema 里的 required 应当是数组：" + value);
+        return (List<String>) value;
+    }
+
+    /**
      * 制裁筛查的正负两侧要**互斥**。
      *
      * <p>这里原先两侧都断言 `contains("命中")`——而"未命中制裁名单"这句话**也含这两个字**，

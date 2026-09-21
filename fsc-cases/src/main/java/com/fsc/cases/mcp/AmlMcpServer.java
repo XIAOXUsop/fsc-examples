@@ -8,6 +8,7 @@ import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,20 +53,69 @@ public final class AmlMcpServer {
         return List.of(
                 tool("screen_sanctions",
                         "制裁名单筛查：输入客户姓名，返回是否命中制裁名单及其等级。",
-                        schema(stringProperty("customerName", "客户姓名")),
+                        new SchemaBuilder()
+                                .required("customerName", stringProperty("customerName", "客户姓名"))
+                                .build(),
                         request -> amlTools.screenSanctions(stringArgument(request, "customerName"))),
 
                 tool("search_regulations",
                         "按关键词检索 AML 法规条文，返回 evidenceId 与条文内容。风险评级结论应引用该 evidenceId。",
-                        schema(stringProperty("query", "检索关键词，例如「一级制裁名单」「结构化拆分」")),
+                        new SchemaBuilder()
+                                .required("query", stringProperty(
+                                        "query", "检索关键词，例如「一级制裁名单」「结构化拆分」"))
+                                .build(),
                         request -> amlTools.searchRegulations(stringArgument(request, "query"))),
 
                 tool("query_transactions",
-                        "查询客户近 N 个月的交易画像摘要（金额、笔数、时段、跨境特征）。",
-                        schema(stringProperty("customerId", "客户内部编号"),
-                                integerProperty("months", "回溯月份数，默认 " + DEFAULT_MONTHS)),
+                        "查询客户近 N 个月的交易画像摘要（金额、笔数、时段、跨境特征）。"
+                                + "months 不传时默认 " + DEFAULT_MONTHS + " 个月。",
+                        // `months` 刻意**不放进 required**。
+                        //
+                        // schema 原先由 `schema(...)` 组装，而那个方法把声明的每个属性
+                        // 都塞进 `required`——于是描述里写着"默认 3"，契约上却是必填：
+                        // 一个照着 description 办事、不传 months 的合规客户端会被
+                        // 协议层的入参校验直接拒掉，而"默认 3"那句在任何合规客户端上
+                        // **一次都不可达**。写着一个行为，契约上却禁止走到它。
+                        new SchemaBuilder()
+                                .required("customerId", stringProperty("customerId", "客户内部编号"))
+                                .addOptional(integerProperty(
+                                        "months", "回溯月份数，默认 " + DEFAULT_MONTHS))
+                                .build(),
                         request -> amlTools.queryTransactions(
                                 stringArgument(request, "customerId"), monthsArgument(request))));
+    }
+
+    /**
+     * 一个 JSON Schema 的构造器：**声明属性**与**声明必填**分开。
+     *
+     * <p>{@code required} 只放名字里点名要求的那些；可选属性走 {@link #addOptional}。
+     * 原先只有一个 {@code schema(...)}，它把传进去的每个属性都算作必填——
+     * 那样"可选参数"在这个服务器上根本无法表达。
+     */
+    private static final class SchemaBuilder {
+        private final Map<String, Object> properties = new LinkedHashMap<>();
+        private final List<String> required = new ArrayList<>();
+
+        SchemaBuilder required(String name, Map<String, Object> property) {
+            properties.put(name, property);
+            required.add(name);
+            return this;
+        }
+
+        SchemaBuilder addOptional(Map<String, Object> property) {
+            properties.putAll(property);
+            return this;
+        }
+
+        Map<String, Object> build() {
+            Map<String, Object> inputSchema = new LinkedHashMap<>();
+            inputSchema.put("type", "object");
+            inputSchema.put("properties", properties);
+            if (!required.isEmpty()) {
+                inputSchema.put("required", List.copyOf(required));
+            }
+            return inputSchema;
+        }
     }
 
     /**
@@ -98,19 +148,6 @@ public final class AmlMcpServer {
                         .addTextContent(handler.apply(request))
                         .build())
                 .build();
-    }
-
-    /** 组装 JSON Schema；required 为全部声明的属性 */
-    private static Map<String, Object> schema(Map<String, Object>... properties) {
-        Map<String, Object> declared = new LinkedHashMap<>();
-        for (Map<String, Object> property : properties) {
-            declared.putAll(property);
-        }
-        Map<String, Object> inputSchema = new LinkedHashMap<>();
-        inputSchema.put("type", "object");
-        inputSchema.put("properties", declared);
-        inputSchema.put("required", List.copyOf(declared.keySet()));
-        return inputSchema;
     }
 
     private static Map<String, Object> stringProperty(String name, String description) {
