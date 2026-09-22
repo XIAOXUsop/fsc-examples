@@ -27,6 +27,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 而不只是"函数能被调用"。
  *
  * <p>全离线：无网络、无 API Key。
+ *
+ * <p>⚠️ <b>已知残留：跑一次本测试会在本机留下一个不退出的 </b>{@code McpStdioMain}<b> 子进程。</b>
+ * 2026-09-22 实测本机累积了 26 个（最早的来自 09-19），已清理。
+ *
+ * <p>成因与已修/未修的部分，写在 {@code McpStdioMain} 那个 {@code System.exit(0)} 的注释里：
+ * 那一行修的是「进程收到关闭信号时被非守护线程拖住、退不出去」，
+ * 而 <b>stdio 传输不把 stdin 的 EOF 当成"客户端走了"</b>——把 shutdown hook 换成会打标记的
+ * 版本后，关掉 stdin 后 stderr 里从没出现过那个标记，线程转储显示 main 一直停在
+ * {@code CountDownLatch.await()}。所以泄漏的另一半在传输层，没修。
+ *
+ * <p>之所以把它写在这里而不是只写在实现里：<b>这条测试是唯一会拉起那个进程的地方</b>，
+ * 而"跑测试会留垃圾进程"这件事此前没有任何地方说过——一个只泄漏不报错的进程
+ * 正好落在「客户端用杀进程、不关心它自己退不退」与「测试从没断言过退出」之间。
+ *
+ * <p>本机验证这条路走不通（换过三种数进程的方法，都因为环境原因量不到东西：
+ * Java 的 {@code ProcessHandle} 在这个环境下数出来是 0；从 JVM 里起
+ * {@code powershell} 拿不到 PATH）。所以这里**不写一个量不准的断言**——
+ * 那只会变成又一条"绿着但什么都没测住"的检查。
  */
 class McpStdioProtocolTest {
 
