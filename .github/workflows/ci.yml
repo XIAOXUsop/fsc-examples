@@ -21,7 +21,13 @@ jobs:
           cache: maven
 
       - name: Run offline tests (Mock 模型 + 离线 RAG，无需 API Key)
-        run: mvn -B -pl fsc-cases test
+        run: ./mvnw -B -pl fsc-cases clean test
+
+      - name: Check evaluation report
+        run: python3 scripts/check_eval_report.py fsc-cases/target/fsc-eval
+
+      - name: Test evaluation report gate
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -q
 
       - name: Upload evaluation report
         if: always()
@@ -29,7 +35,7 @@ jobs:
         with:
           name: fsc-eval-report
           path: fsc-cases/target/fsc-eval/
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   secret-scan:
     name: Secret Scan

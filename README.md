@@ -92,14 +92,14 @@
 
 ## 快速开始
 
-需要 JDK 21 与 Maven。
+需要 JDK 21；仓库自带 Maven Wrapper，无需另装 Maven。
 
 ```bash
 # 全离线运行（Mock 模型 + 离线 RAG，无需任何 API Key、无需联网）
-mvn -pl fsc-cases test
+./mvnw -pl fsc-cases test
 
 # 运行真实模型 Agent 冒烟测试（需自备 Key）
-RUN_LIVE=true DEEPSEEK_API_KEY=xxx mvn -pl fsc-cases test -Dtest=AmlAgentLiveTest
+RUN_LIVE=true DEEPSEEK_API_KEY=xxx ./mvnw -pl fsc-cases test -Dtest=AmlAgentLiveTest
 ```
 
 运行结束后会在控制台打印双轨计分结果与逐条明细，`target/fsc-eval/` 下会写出 JSON 报告文件。
